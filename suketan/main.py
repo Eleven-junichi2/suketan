@@ -1,3 +1,4 @@
+# TODO: スケジュールパターンデータの保存・読み込みのタイミングを、SchedulePatternManagerクラスではなく、コマンド実行部分の処理に移動する（テストの実装をしやすくするため）
 from pathlib import Path
 import json
 
@@ -11,14 +12,23 @@ task_app = typer.Typer()
 app.add_typer(pattern_app, name="pattern")
 app.add_typer(task_app, name="task")
 
+if not Path(typer.get_app_dir(APP_NAME)).exists():
+    Path(typer.get_app_dir(APP_NAME)).mkdir(parents=False, exist_ok=True)
+config = {
+    "schedule_patterns_dir": Path(typer.get_app_dir(APP_NAME)),
+    "schedule_patterns_filename": "schedule_patterns.json",
+}
+if not (Path(typer.get_app_dir(APP_NAME)) / "config.json").exists():
+    with open(Path(typer.get_app_dir(APP_NAME)) / "config.json", "w") as f:
+        json.dump(config, f)
+with open(Path(typer.get_app_dir(APP_NAME)) / "config.json", "r") as f:
+    config.update(json.load(f))
+
 
 class SchedulePatternManager:
     def __init__(self):
         self.current_pattern = None
         self.schedule_patterns: dict[str, dict[str, str]] = {}
-        self.schedule_patterns_filepath = (
-            Path(typer.get_app_dir(APP_NAME)) / "schedule_patterns.json"
-        )
 
     def create_pattern(self, name: str):
         if self.current_pattern is None:
@@ -97,13 +107,18 @@ class SchedulePatternManager:
             typer.echo(f" - {name}: {time}")
 
     def load_data(self):
-        if self.schedule_patterns_filepath.exists():
-            with open(self.schedule_patterns_filepath, "r") as f:
+        if config["schedule_patterns_dir"].exists():
+            with open(
+                config["schedule_patterns_dir"] / config["schedule_patterns_filename"],
+                "r",
+            ) as f:
                 self.schedule_patterns = json.load(f)
                 # typer.echo("Loaded schedule patterns from file.")
 
     def save_data(self):
-        with open(self.schedule_patterns_filepath, "w") as f:
+        with open(
+            config["schedule_patterns_dir"] / config["schedule_patterns_filename"], "w"
+        ) as f:
             json.dump(self.schedule_patterns, f)
             # typer.echo("Saved schedule patterns to file.")
 
