@@ -42,6 +42,8 @@ load_config()
 @functools.lru_cache()
 def get_locale_messages():
     lang = config.get("language", "ja")
+    # PyInstallerでバイナリ化する際は、localeディレクトリを同梱する必要あり
+    # 例: pyinstaller --add-data "suketan/locale:locale" ...
     path = Path(__file__).parent / "locale" / f"locale_{lang}.json"
     if not path.exists():
         raise FileNotFoundError(f"Locale file not found: {path}")
