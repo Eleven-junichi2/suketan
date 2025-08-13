@@ -129,11 +129,11 @@ class SchedulePatternManager:
     #             # typer.echo("Loaded schedule patterns from file.")
 
 
-def save_data(self):
+def save_schedule_patterns(schedule_patterns: dict[str, dict[str, str]]):
     with open(
         config["schedule_patterns_dir"] / config["schedule_patterns_filename"], "w"
     ) as f:
-        json.dump(self.schedule_patterns, f)
+        json.dump(schedule_patterns, f)
         # typer.echo("Saved schedule patterns to file.")
 
 
