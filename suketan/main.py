@@ -164,7 +164,7 @@ class SchedulePatternManager:
         if not self.current_pattern or self.current_pattern not in self.patterns:
             typer.echo(msg["no_pattern_set"])
             return
-        tasks = self.patterns[self.current_pattern]
+        tasks: dict[str, str] = self.patterns[self.current_pattern]
         if not tasks:
             typer.echo(msg["no_tasks"])
             return
@@ -241,7 +241,7 @@ def delete_pattern(
 @app.command("use", help=msg["use_help"])
 def use_pattern(name: str = typer.Argument(..., help=msg["use_arg_name_help"])):
     manager.use_pattern(name)
-    config["current_pattern"] = name
+    save_manager_data(manager)
 
 
 @app.command("show", help=msg["show_help"])
