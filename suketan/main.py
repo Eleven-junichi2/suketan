@@ -12,8 +12,12 @@ task_app = typer.Typer()
 app.add_typer(pattern_app, name="pattern")
 app.add_typer(task_app, name="task")
 
+# --prepare application data directory--
 if not Path(typer.get_app_dir(APP_NAME)).exists():
     Path(typer.get_app_dir(APP_NAME)).mkdir(parents=False, exist_ok=True)
+# ----
+
+# --prepare config--
 config = {
     "schedule_patterns_dir": Path(typer.get_app_dir(APP_NAME)),
     "schedule_patterns_filename": "schedule_patterns.json",
@@ -23,12 +27,21 @@ if not (Path(typer.get_app_dir(APP_NAME)) / "config.json").exists():
         json.dump(config, f)
 with open(Path(typer.get_app_dir(APP_NAME)) / "config.json", "r") as f:
     config.update(json.load(f))
+# ----
 
 
 class SchedulePatternManager:
     def __init__(self):
         self.current_pattern = None
-        self.schedule_patterns: dict[str, dict[str, str]] = {}
+        self._schedule_patterns: dict[str, dict[str, str]] = {}
+
+    @property
+    def schedule_patterns(self):
+        return self._schedule_patterns
+
+    @schedule_patterns.setter
+    def schedule_patterns(self, value: dict[str, dict[str, str]]):
+        self._schedule_patterns = value
 
     def create_pattern(self, name: str):
         if self.current_pattern is None:
@@ -106,25 +119,26 @@ class SchedulePatternManager:
         for name, time in tasks.items():
             typer.echo(f" - {name}: {time}")
 
-    def load_data(self):
-        if config["schedule_patterns_dir"].exists():
-            with open(
-                config["schedule_patterns_dir"] / config["schedule_patterns_filename"],
-                "r",
-            ) as f:
-                self.schedule_patterns = json.load(f)
-                # typer.echo("Loaded schedule patterns from file.")
+    # def load_data(self):
+    #     if config["schedule_patterns_dir"].exists():
+    #         with open(
+    #             config["schedule_patterns_dir"] / config["schedule_patterns_filename"],
+    #             "r",
+    #         ) as f:
+    #             self.schedule_patterns = json.load(f)
+    #             # typer.echo("Loaded schedule patterns from file.")
 
-    def save_data(self):
-        with open(
-            config["schedule_patterns_dir"] / config["schedule_patterns_filename"], "w"
-        ) as f:
-            json.dump(self.schedule_patterns, f)
-            # typer.echo("Saved schedule patterns to file.")
+
+def save_data(self):
+    with open(
+        config["schedule_patterns_dir"] / config["schedule_patterns_filename"], "w"
+    ) as f:
+        json.dump(self.schedule_patterns, f)
+        # typer.echo("Saved schedule patterns to file.")
 
 
 manager = SchedulePatternManager()
-manager.load_data()
+# manager.load_data()
 
 
 @pattern_app.command("create")
