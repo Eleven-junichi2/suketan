@@ -1,0 +1,17 @@
+{
+  "pattern_already_exists": "Pattern '{name}' already exists.",
+  "created_pattern": "Created pattern: {name}",
+  "no_patterns": "No schedule patterns found.",
+  "schedule_patterns": "Schedule patterns:",
+  "deleted_pattern": "Deleted schedule pattern: {name}",
+  "pattern_not_found": "Schedule pattern not found: {name}",
+  "using_pattern": "Using schedule pattern: {name}",
+  "no_pattern_set": "No schedule pattern is currently set.",
+  "schedule_pattern": "Schedule pattern '{name}':",
+  "added_task": "Added task '{task}' ({duration}) to pattern '{pattern}'",
+  "removed_task": "Removed task '{task}' from pattern '{pattern}'",
+  "task_not_found": "Task '{task}' not found in pattern '{pattern}'",
+  "no_tasks": "No tasks found in schedule pattern.",
+  "tasks_in_pattern": "Tasks in schedule pattern '{pattern}':",
+  "free_time": "Free time: {h}h {m}m"
+}

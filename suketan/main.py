@@ -2,13 +2,15 @@
 from pathlib import Path
 import json
 
+import functools
+
 import typer
 
 APP_NAME = "Suketan"
 
-app = typer.Typer()
-pattern_app = typer.Typer()
-task_app = typer.Typer()
+app = typer.Typer(help="一日のスケジュールパターンとタスクを管理し、可処分時間を可視化するアプリです。")
+pattern_app = typer.Typer(help="スケジュールパターンの作成・一覧・削除を行います。")
+task_app = typer.Typer(help="タスクの追加・一覧・削除を行います。")
 app.add_typer(pattern_app, name="pattern")
 app.add_typer(task_app, name="task")
 
@@ -19,164 +21,241 @@ if not Path(typer.get_app_dir(APP_NAME)).exists():
 
 # --prepare config--
 config = {
-    "schedule_patterns_dir": Path(typer.get_app_dir(APP_NAME)),
+    "schedule_patterns_dir": Path(typer.get_app_dir(APP_NAME)).as_posix(),
     "schedule_patterns_filename": "schedule_patterns.json",
+    "language": "ja",  # デフォルトは日本語
 }
-if not (Path(typer.get_app_dir(APP_NAME)) / "config.json").exists():
+
+
+# ローカライズメッセージ取得関数
+@functools.lru_cache()
+def get_locale_messages():
+    lang = config.get("language", "ja")
+    path = Path(__file__).parent / "locale" / f"locale_{lang}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Locale file not found: {path}")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_config():
     with open(Path(typer.get_app_dir(APP_NAME)) / "config.json", "w") as f:
-        json.dump(config, f)
-with open(Path(typer.get_app_dir(APP_NAME)) / "config.json", "r") as f:
-    config.update(json.load(f))
+        json.dump(config, f, indent=4)
+
+
+def load_config():
+    with open(Path(typer.get_app_dir(APP_NAME)) / "config.json", "r") as f:
+        config.update(json.load(f))
+
+
+if not (Path(typer.get_app_dir(APP_NAME)) / "config.json").exists():
+    save_config()
+load_config()
 # ----
 
 
 class SchedulePatternManager:
-    def __init__(self):
-        self.current_pattern = None
-        self._schedule_patterns: dict[str, dict[str, str]] = {}
+    def __init__(self, data: dict | None = None):
+        # data: {"current_pattern": str, "patterns": {pattern_name: {task_name: duration, ...}, ...}}
+        if data is None:
+            self.current_pattern = None
+            self.patterns = {}
+        else:
+            self.current_pattern = data.get("current_pattern")
+            self.patterns = data.get("patterns", {})
 
-    @property
-    def schedule_patterns(self):
-        return self._schedule_patterns
-
-    @schedule_patterns.setter
-    def schedule_patterns(self, value: dict[str, dict[str, str]]):
-        self._schedule_patterns = value
+    def to_dict(self) -> dict:
+        return {
+            "current_pattern": self.current_pattern,
+            "patterns": self.patterns,
+        }
 
     def create_pattern(self, name: str):
-        if self.current_pattern is None:
-            self.current_pattern = name
-        self.schedule_patterns[name] = {}
-        typer.echo(f"Creating a schedule pattern: {name}")
+        msg = get_locale_messages()
+        if name in self.patterns:
+            typer.echo(msg["pattern_already_exists"].format(name=name))
+            return
+        self.patterns[name] = {}
+        self.current_pattern = name
+        typer.echo(msg["created_pattern"].format(name=name))
 
     def list_patterns(self):
-        if not self.schedule_patterns:
-            typer.echo("No schedule patterns found.")
+        msg = get_locale_messages()
+        if not self.patterns:
+            typer.echo(msg["no_patterns"])
             return
-        typer.echo("Schedule patterns:")
-        for name in self.schedule_patterns.keys():
+        typer.echo(msg["schedule_patterns"])
+        for name in self.patterns.keys():
             typer.echo(f" - {name}")
 
     def delete_pattern(self, name: str):
-        if name not in self.schedule_patterns:
-            typer.echo(f"Schedule pattern not found: {name}")
+        msg = get_locale_messages()
+        if name not in self.patterns:
+            typer.echo(msg["pattern_not_found"].format(name=name))
             return
-        del self.schedule_patterns[name]
-        typer.echo(f"Deleted schedule pattern: {name}")
+        del self.patterns[name]
+        if self.current_pattern == name:
+            self.current_pattern = None
+        typer.echo(msg["deleted_pattern"].format(name=name))
+        typer.echo(msg["using_pattern"].format(name=name))
 
     def use_pattern(self, name: str):
-        if name not in self.schedule_patterns:
-            typer.echo(f"Schedule pattern not found: {name}")
+        msg = get_locale_messages()
+        if name not in self.patterns:
+            typer.echo(msg["pattern_not_found"].format(name=name))
             return
         self.current_pattern = name
-        typer.echo(f"Using schedule pattern: {name}")
+        typer.echo(msg["using_pattern"].format(name=name))
+        typer.echo(msg["schedule_pattern"].format(name=name))
 
     def show_pattern(self, name: str | None = None):
+        msg = get_locale_messages()
         if name is None:
-            if self.current_pattern:
-                typer.echo(f"Current schedule pattern: {self.current_pattern}")
-            else:
-                typer.echo("No schedule pattern is currently set.")
-        else:
-            data = self.schedule_patterns.get(name)
-            if data:
-                typer.echo(f"Schedule pattern '{name}':")
-                for key, value in data.items():
-                    typer.echo(f"  {key}: {value}")
-            else:
-                typer.echo(f"Schedule pattern not found: {name}")
-
-    def add_task(self, name: str, time: str):
-        if self.current_pattern is None:
-            typer.echo("No schedule pattern is currently set.")
+            name = self.current_pattern
+        if not name or name not in self.patterns:
+            typer.echo(msg["no_pattern_set"])
             return
-        self.schedule_patterns[self.current_pattern][name] = time
-        typer.echo(f"Adding task '{name}' to schedule pattern: {self.current_pattern}")
+        typer.echo(msg["schedule_pattern"].format(name=name))
+        tasks = self.patterns[name]
+        total_minutes = 0
+        for task, duration in tasks.items():
+            typer.echo(f"  {task}: {duration}")
+            total_minutes += self._parse_duration(duration)
+        free_minutes = 24 * 60 - total_minutes
+        h, m = divmod(free_minutes, 60)
+        typer.echo(msg["free_time"].format(h=h, m=m))
 
-    def remove_task(self, name: str):
-        if self.current_pattern is None:
-            typer.echo("No schedule pattern is currently set.")
+    def add_task(self, task_name: str, duration: str):
+        msg = get_locale_messages()
+        if not self.current_pattern or self.current_pattern not in self.patterns:
+            typer.echo(msg["no_pattern_set"])
             return
-        if name in self.schedule_patterns[self.current_pattern]:
-            del self.schedule_patterns[self.current_pattern][name]
-            typer.echo(
-                f"Removing task '{name}' from schedule pattern: {self.current_pattern}"
+        self.patterns[self.current_pattern][task_name] = duration
+        typer.echo(
+            msg["added_task"].format(
+                task=task_name, duration=duration, pattern=self.current_pattern
             )
-        else:
+        )
+
+    def remove_task(self, task_name: str):
+        msg = get_locale_messages()
+        if not self.current_pattern or self.current_pattern not in self.patterns:
+            typer.echo(msg["no_pattern_set"])
+            return
+        if task_name not in self.patterns[self.current_pattern]:
             typer.echo(
-                f"Task '{name}' not found in schedule pattern: {self.current_pattern}"
+                msg["task_not_found"].format(
+                    task=task_name, pattern=self.current_pattern
+                )
             )
+            return
+        del self.patterns[self.current_pattern][task_name]
+        typer.echo(
+            msg["removed_task"].format(task=task_name, pattern=self.current_pattern)
+        )
 
     def list_tasks(self):
-        if self.current_pattern is None:
-            typer.echo("No schedule pattern is currently set.")
+        msg = get_locale_messages()
+        if not self.current_pattern or self.current_pattern not in self.patterns:
+            typer.echo(msg["no_pattern_set"])
             return
-        tasks = self.schedule_patterns[self.current_pattern]
+        tasks = self.patterns[self.current_pattern]
         if not tasks:
-            typer.echo("No tasks found in schedule pattern.")
+            typer.echo(msg["no_tasks"])
             return
-        typer.echo("Tasks in schedule pattern:")
-        for name, time in tasks.items():
-            typer.echo(f" - {name}: {time}")
+        typer.echo(msg["tasks_in_pattern"].format(pattern=self.current_pattern))
+        total_minutes = 0
+        for name, duration in tasks.items():
+            typer.echo(f" - {name}: {duration}")
+            total_minutes += self._parse_duration(duration)
+        free_minutes = 24 * 60 - total_minutes
+        h, m = divmod(free_minutes, 60)
+        typer.echo(msg["free_time"].format(h=h, m=m))
 
-    # def load_data(self):
-    #     if config["schedule_patterns_dir"].exists():
-    #         with open(
-    #             config["schedule_patterns_dir"] / config["schedule_patterns_filename"],
-    #             "r",
-    #         ) as f:
-    #             self.schedule_patterns = json.load(f)
-    #             # typer.echo("Loaded schedule patterns from file.")
+    @staticmethod
+    def _parse_duration(duration: str) -> int:
+        """
+        "2:30"→150, "45"→45, "1h20m"→80 のように`時間:分`表記を`分`に変換
+        """
+        import re
+
+        duration = duration.strip()
+        if re.match(r"^\d+$", duration):
+            return int(duration)
+        if re.match(r"^\d{1,2}:\d{2}$", duration):
+            h, m = map(int, duration.split(":"))
+            return h * 60 + m
+        m = re.match(r"^(?:(\d+)h)?(?:(\d+)m)?$", duration)
+        if m:
+            h = int(m.group(1) or 0)
+            mi = int(m.group(2) or 0)
+            return h * 60 + mi
+        return 0
 
 
-def save_schedule_patterns(schedule_patterns: dict[str, dict[str, str]]):
+def save_manager_data(manager: SchedulePatternManager):
     with open(
-        config["schedule_patterns_dir"] / config["schedule_patterns_filename"], "w"
+        Path(config["schedule_patterns_dir"]) / config["schedule_patterns_filename"],
+        "w",
     ) as f:
-        json.dump(schedule_patterns, f)
-        # typer.echo("Saved schedule patterns to file.")
+        json.dump(manager.to_dict(), f, ensure_ascii=False, indent=2)
 
 
-manager = SchedulePatternManager()
-# manager.load_data()
+def load_manager_data() -> dict:
+    path = Path(config["schedule_patterns_dir"]) / config["schedule_patterns_filename"]
+    if not path.exists():
+        return {}
+    with open(path, "r") as f:
+        return json.load(f)
 
 
-@pattern_app.command("create")
-def create_pattern(name: str):
+manager = SchedulePatternManager(load_manager_data())
+
+
+@pattern_app.command("create", help="新しいスケジュールパターンを作成します。")
+def create_pattern(name: str = typer.Argument(..., help="作成するパターン名")):
     manager.create_pattern(name)
+    save_manager_data(manager)
 
 
-@pattern_app.command("list")
+@pattern_app.command("list", help="登録されているすべてのスケジュールパターンを表示します。")
 def list_patterns():
     manager.list_patterns()
 
 
-@pattern_app.command("delete")
-def delete_pattern(name: str):
+@pattern_app.command("delete", help="指定したスケジュールパターンを削除します。")
+def delete_pattern(name: str = typer.Argument(..., help="削除するパターン名")):
     manager.delete_pattern(name)
+    save_manager_data(manager)
 
 
-@app.command("use")
-def use_pattern(name: str):
+@app.command("use", help="指定したパターンをアクティブにします。")
+def use_pattern(name: str = typer.Argument(..., help="アクティブにするパターン名")):
     manager.use_pattern(name)
+    config["current_pattern"] = name
 
 
-@app.command("show")
-def show_pattern(name: str = typer.Argument(None)):
+@app.command("show", help="指定したパターン、または現在アクティブなパターンの内容と可処分時間を表示します。")
+def show_pattern(name: str = typer.Argument(None, help="表示するパターン名（省略時はアクティブなパターン）")):
     manager.show_pattern(name)
 
 
-@task_app.command("add")
-def add_task(name: str, time: str):
+@task_app.command("add", help="アクティブなパターンにタスクを追加します。")
+def add_task(
+    name: str = typer.Argument(..., help="追加するタスク名"),
+    time: str = typer.Argument(..., help="所要時間（例: 1:30, 45, 2h10m など）")
+):
     manager.add_task(name, time)
+    save_manager_data(manager)
 
 
-@task_app.command("remove")
-def remove_task(name: str):
+@task_app.command("remove", help="アクティブなパターンからタスクを削除します。")
+def remove_task(name: str = typer.Argument(..., help="削除するタスク名")):
     manager.remove_task(name)
+    save_manager_data(manager)
 
 
-@task_app.command("list")
+@task_app.command("list", help="アクティブなパターンのタスク一覧と可処分時間を表示します。")
 def list_tasks():
     manager.list_tasks()
 
