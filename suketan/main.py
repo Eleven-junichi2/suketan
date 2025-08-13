@@ -1,4 +1,3 @@
-# TODO: スケジュールパターンデータの保存・読み込みのタイミングを、SchedulePatternManagerクラスではなく、コマンド実行部分の処理に移動する（テストの実装をしやすくするため）
 from pathlib import Path
 import json
 
@@ -8,16 +7,12 @@ import typer
 
 APP_NAME = "Suketan"
 
-app = typer.Typer(help="一日のスケジュールパターンとタスクを管理し、可処分時間を可視化するアプリです。")
-pattern_app = typer.Typer(help="スケジュールパターンの作成・一覧・削除を行います。")
-task_app = typer.Typer(help="タスクの追加・一覧・削除を行います。")
-app.add_typer(pattern_app, name="pattern")
-app.add_typer(task_app, name="task")
 
 # --prepare application data directory--
 if not Path(typer.get_app_dir(APP_NAME)).exists():
     Path(typer.get_app_dir(APP_NAME)).mkdir(parents=False, exist_ok=True)
 # ----
+
 
 # --prepare config--
 config = {
@@ -25,17 +20,6 @@ config = {
     "schedule_patterns_filename": "schedule_patterns.json",
     "language": "ja",  # デフォルトは日本語
 }
-
-
-# ローカライズメッセージ取得関数
-@functools.lru_cache()
-def get_locale_messages():
-    lang = config.get("language", "ja")
-    path = Path(__file__).parent / "locale" / f"locale_{lang}.json"
-    if not path.exists():
-        raise FileNotFoundError(f"Locale file not found: {path}")
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
 
 
 def save_config():
@@ -52,6 +36,25 @@ if not (Path(typer.get_app_dir(APP_NAME)) / "config.json").exists():
     save_config()
 load_config()
 # ----
+
+
+# ローカライズメッセージ取得関数
+@functools.lru_cache()
+def get_locale_messages():
+    lang = config.get("language", "ja")
+    path = Path(__file__).parent / "locale" / f"locale_{lang}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Locale file not found: {path}")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+msg = get_locale_messages()
+app = typer.Typer(help=msg["app_help"])
+pattern_app = typer.Typer(help=msg["pattern_help"])
+task_app = typer.Typer(help=msg["task_help"])
+app.add_typer(pattern_app, name="pattern")
+app.add_typer(task_app, name="task")
 
 
 class SchedulePatternManager:
@@ -212,50 +215,54 @@ def load_manager_data() -> dict:
 manager = SchedulePatternManager(load_manager_data())
 
 
-@pattern_app.command("create", help="新しいスケジュールパターンを作成します。")
-def create_pattern(name: str = typer.Argument(..., help="作成するパターン名")):
+@pattern_app.command("create", help=msg["pattern_create_help"])
+def create_pattern(
+    name: str = typer.Argument(..., help=msg["pattern_create_arg_name_help"]),
+):
     manager.create_pattern(name)
     save_manager_data(manager)
 
 
-@pattern_app.command("list", help="登録されているすべてのスケジュールパターンを表示します。")
+@pattern_app.command("list", help=msg["pattern_list_help"])
 def list_patterns():
     manager.list_patterns()
 
 
-@pattern_app.command("delete", help="指定したスケジュールパターンを削除します。")
-def delete_pattern(name: str = typer.Argument(..., help="削除するパターン名")):
+@pattern_app.command("delete", help=msg["pattern_delete_help"])
+def delete_pattern(
+    name: str = typer.Argument(..., help=msg["pattern_delete_arg_name_help"]),
+):
     manager.delete_pattern(name)
     save_manager_data(manager)
 
 
-@app.command("use", help="指定したパターンをアクティブにします。")
-def use_pattern(name: str = typer.Argument(..., help="アクティブにするパターン名")):
+@app.command("use", help=msg["use_help"])
+def use_pattern(name: str = typer.Argument(..., help=msg["use_arg_name_help"])):
     manager.use_pattern(name)
     config["current_pattern"] = name
 
 
-@app.command("show", help="指定したパターン、または現在アクティブなパターンの内容と可処分時間を表示します。")
-def show_pattern(name: str = typer.Argument(None, help="表示するパターン名（省略時はアクティブなパターン）")):
+@app.command("show", help=msg["show_help"])
+def show_pattern(name: str = typer.Argument(None, help=msg["show_arg_name_help"])):
     manager.show_pattern(name)
 
 
-@task_app.command("add", help="アクティブなパターンにタスクを追加します。")
+@task_app.command("add", help=msg["task_add_help"])
 def add_task(
-    name: str = typer.Argument(..., help="追加するタスク名"),
-    time: str = typer.Argument(..., help="所要時間（例: 1:30, 45, 2h10m など）")
+    name: str = typer.Argument(..., help=msg["task_add_arg_name_help"]),
+    time: str = typer.Argument(..., help=msg["task_add_arg_time_help"]),
 ):
     manager.add_task(name, time)
     save_manager_data(manager)
 
 
-@task_app.command("remove", help="アクティブなパターンからタスクを削除します。")
-def remove_task(name: str = typer.Argument(..., help="削除するタスク名")):
+@task_app.command("remove", help=msg["task_remove_help"])
+def remove_task(name: str = typer.Argument(..., help=msg["task_remove_arg_name_help"])):
     manager.remove_task(name)
     save_manager_data(manager)
 
 
-@task_app.command("list", help="アクティブなパターンのタスク一覧と可処分時間を表示します。")
+@task_app.command("list", help=msg["task_list_help"])
 def list_tasks():
     manager.list_tasks()
 
